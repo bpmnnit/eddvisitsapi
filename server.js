@@ -1,6 +1,20 @@
 const express = require('express');
 const MongoClient = require('mongodb').MongoClient;
 const cors = require('cors');
+const AES = require("crypto-js/aes");
+const Utf8 = require('crypto-js/enc-utf8');
+
+const SECRET_KEY = "harekrishnaharekrishnakrishnakrishnaharehare";
+
+const encrypt = (text) => {
+  const encrypted = AES.encrypt(text, SECRET_KEY);
+  return encrypted.toString();
+};
+
+const decrypt = (encryptedText) => {
+  const decrypted = AES.decrypt(encryptedText, SECRET_KEY);
+  return decrypted.toString(Utf8);
+};
 
 const corsOptions = {
   origin: '*',
@@ -70,6 +84,36 @@ app.post('/signup', async (req, res) => {
     const message = `User with _id: ${result.insertedId} was successfully registered.`;
     console.log(`User with _id: ${result.insertedId} was successfully registered.`);
     res.status(200).json({message: message, id: result.insertedId});
+  } catch (err) {
+    console.log(err);
+  } finally {
+    console.log('MongoDB connection closed...');
+    client.close();
+  }
+});
+
+app.post('/login', async (req, res) => {
+  const { cpf, password } = req.body;
+  const originalPassword = decrypt(password);
+  console.log('Original: ', originalPassword);
+  const client = await MongoClient.connect(url, { useNewUrlParser: true }).catch(err => { console.log(err); });
+  if (!client) {
+    console.log('Somehow not connected to the database!');
+    return;
+  }
+  try {
+    const db = client.db("exploredb");
+    const usersCollection = db.collection('users');
+    const result = await usersCollection.findOne({cpf: cpf});
+    const userDecryptedPassword = decrypt(result.password);
+    console.log('Saved Decrypted: ', userDecryptedPassword);
+    if (originalPassword === userDecryptedPassword) {
+      console.log('Babba Re!');
+    }
+    // const message = `User with _id: ${result.insertedId} was successfully registered.`;
+    // console.log(`User with _id: ${result.insertedId} was successfully registered.`);
+    // res.status(200).json({message: message, id: result.insertedId});
+    res.status(200).json({message: 'Message!'});
   } catch (err) {
     console.log(err);
   } finally {
