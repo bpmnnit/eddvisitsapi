@@ -60,8 +60,9 @@ app.post('/addvisit', async (req, res) => {
     const db = client.db("exploredb");
     const visitsCollection = db.collection('visits');
     const result = await visitsCollection.insertOne(visitDetails);
-    console.log(`A document was inserted with the _id: ${result.insertedId}`);
-    res.send(result).status(200);
+    const message = 'Request Accepted. Approval Awaited.';
+    console.log(`A visit was inserted with the _id: ${result.insertedId}`);
+    res.status(200).json({message: message, id: result.insertedId, severity: 'success'});
   } catch (err) {
     console.log(err);
   } finally {
@@ -72,6 +73,7 @@ app.post('/addvisit', async (req, res) => {
 
 app.post('/signup', async (req, res) => {
   const userDetails = req.body;
+  const cpf = userDetails.cpf;
   const client = await MongoClient.connect(url, { useNewUrlParser: true }).catch(err => { console.log(err); });
   if (!client) {
     console.log('Somehow not connected to the database!');
@@ -80,10 +82,16 @@ app.post('/signup', async (req, res) => {
   try {
     const db = client.db("exploredb");
     const usersCollection = db.collection('users');
-    const result = await usersCollection.insertOne(userDetails);
-    const message = `User with _id: ${result.insertedId} was successfully registered.`;
-    console.log(`User with _id: ${result.insertedId} was successfully registered.`);
-    res.status(200).json({message: message, id: result.insertedId});
+    const existingCpf = await usersCollection.findOne({cpf: cpf});
+    if (existingCpf === null) {
+      const result = await usersCollection.insertOne(userDetails);
+      const message = `User successfully registered.`;
+      console.log(`User with _id: ${result.insertedId} was successfully registered.`);
+      res.status(200).json({message: message, id: result.insertedId, severity: 'success'});
+    } else {
+      const message = `User with CPF: ${cpf} already exists.`;
+      res.status(403).json({message: message, severity: 'error'});
+    }
   } catch (err) {
     console.log(err);
   } finally {
