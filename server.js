@@ -49,8 +49,29 @@ app.get('/members', async (req, res) => {
   }
 });
 
+app.get('/list', async (req, res) => {
+  const client = await MongoClient.connect(url, { useNewUrlParser: true }).catch(err => { console.log(err); });
+  if (!client) {
+    console.log('Somehow not connected to the database!');
+    return;
+  }
+  try {
+    const db = client.db("exploredb");
+    const eddmembers = db.collection('visits');
+    const results = await eddmembers.find().sort({requestedOn: -1}).toArray();
+    console.log(results);
+    res.send(results).status(200);
+  } catch (err) {
+    console.log(err);
+  } finally {
+    console.log('MongoDB connection closed');
+    client.close();
+  }
+});
+
 app.post('/addvisit', async (req, res) => {
   const visitDetails = req.body;
+  console.log(visitDetails);
   const client = await MongoClient.connect(url, { useNewUrlParser: true }).catch(err => { console.log(err); });
   if (!client) {
     console.log('Somehow not connected to the database!');
@@ -100,10 +121,20 @@ app.post('/signup', async (req, res) => {
   }
 });
 
+const getVisitsByCpf = async (db, cpf, password) => {
+  const originalPassword = decrypt(password);
+  const usersCollection = db.collection('users');
+  const visitee = await usersCollection.findOne({cpf: +cpf});
+  const userDecryptedPassword = decrypt(visitee.password);
+  if (originalPassword === userDecryptedPassword) {
+    const visitsCollection = db.collection('visits');
+    const visitRequests = await visitsCollection.find({cpf: cpf}).next();
+    return visitRequests;
+  }
+};
+
 app.post('/login', async (req, res) => {
   const { cpf, password } = req.body;
-  const originalPassword = decrypt(password);
-  console.log('Original: ', originalPassword);
   const client = await MongoClient.connect(url, { useNewUrlParser: true }).catch(err => { console.log(err); });
   if (!client) {
     console.log('Somehow not connected to the database!');
@@ -111,17 +142,14 @@ app.post('/login', async (req, res) => {
   }
   try {
     const db = client.db("exploredb");
-    const usersCollection = db.collection('users');
-    const result = await usersCollection.findOne({cpf: cpf});
-    const userDecryptedPassword = decrypt(result.password);
-    console.log('Saved Decrypted: ', userDecryptedPassword);
-    if (originalPassword === userDecryptedPassword) {
-      console.log('Babba Re!');
+    const visitRequests = await getVisitsByCpf(db, cpf, password);
+    if (visitRequests !== undefined || visitRequests !== null) {
+      const message = `Visit requests for CPF: ${cpf} are being returned.`;
+      res.status(200).json({message: message, visitRequests: visitRequests, severity: 'success'});
+    } else {
+      const message = `User not found OR Invalid login credentials.`;
+      res.status(403).json({message: message, severity: 'error'});
     }
-    // const message = `User with _id: ${result.insertedId} was successfully registered.`;
-    // console.log(`User with _id: ${result.insertedId} was successfully registered.`);
-    // res.status(200).json({message: message, id: result.insertedId});
-    res.status(200).json({message: 'Message!'});
   } catch (err) {
     console.log(err);
   } finally {
